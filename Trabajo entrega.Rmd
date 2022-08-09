@@ -1,0 +1,717 @@
+---
+title: "**Ciencia de datos aplicada a endoscopía digestiva**"
+author: "Alejandro Rey"
+date: "*Julio 2020*"
+output: 
+  html_document:
+    css: 
+    fig_height: 8
+    fig_width: 12
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: cerulean
+editor_options: 
+  chunk_output_type: console
+---
+```{r options, echo = FALSE}
+
+knitr::opts_chunk$set(warning = FALSE,
+                      error = FALSE,
+                      message = FALSE)
+
+``` 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Pregunta de investigación y objetivos del análisis
+
+
+Para la evaluación del desempeño profesional en un servicio de endoscopía digestiva existen ciertos indicadores que buscan reflejar la calidad de los procedimientos y procesos de la atención médica. El monitoreo y el análisis periódico de los mismos permite estimar el estado actual y elaborar medidas tendientes a la mejora constante en la calidad de atención.  
+
+Dentro de estos indicadores, la tasa de detección de adenomas es la medida más relevante a la hora de evaluar la calidad de los estudios de rastreo y prevención del cáncer colorrectal. La tasa de detección de pólipos es un aproximativo de la misma que no requiere el resultado del análisis histopatológico para su cálculo. Ambos indicadores surgen de la relación entre el número de polipos o adenomas detectados sobre el total de los estudios de rastreo realizados. 
+
+Otras evaluaciones de calidad en endoscopía, también directamente relacionadas con la prevención del cáncer colorrectal, son la tasa de intubación cecal y la preparación colónica para el estudio. La tasa de intubación cecal es la proporción de estudios considerados completos sobre la totalidad de estudios. La preparación colónica se evalúa con escalas de puntuación. La más utilizada es la escala de Boston, la cual divide al colon en tres segmentos (colon ascendente, transverso y descentente) y otorga un puntaje de 0 a 3 a cada parte, siendo 9 la preparación ideal. Para ser considerada adecuada, el puntaje total debe ser mayor o igual a 6 y todos los segmentos deben recibir un puntaje no menor a 2. 
+
+>El objetivo general del trabajo es medir la tasa de detección de pólipos de un servicio de endoscopía digestiva en un hospital universitario de la Ciudad Autónoma de Buenos Aires. 
+
+**Los objetivos secundarios son:**
+
+   . Medir el número y tipo de estudios realizados en cada sede.
+   
+   . Medir el número de colonoscopías de prevencón de cancer colorrectal y el número de terapéuticas en dichos estudios, su distribución por sede y por endoscopista.
+
+   . Investigar si existe asociación entre el número de procedimientos realizados y el número de pólipos detectados.
+
+   . Investigar si existe asociación entre el número de procedimientos realizados y la tasa de detección de pólipos.
+   
+   . Calcular la tasa de estudios completos
+
+   . Evaluar la calidad de la preparación de los estudios.
+
+   . Investigar si existe asociación entre la calidad de la preparación y el tipo de laxante utilizado.
+
+
+# Metodología
+
+Se realizó un estudio de corte transversal, en el cual se analizaron todos los estudios de endoscopía digestiva realizados durante el año 2018 en las dos sedes de un hospital privado universitario de tercer nivel. Ambas sedes se encuentran en la Ciudad Autónoma de Buenos Aires. 
+
+Los procedimientos endoscópicos fueron realizados en pacientes mayores de 18 años, en su mayoría residentes en la región metropolitana de AMBA. Se analizaron tanto estudios electivos como estudios de urgencia. Para la tasa de detección de pólipos se analizaron exclusivamente los estudios indicados para prevención de cáncer colorretal. 
+
+Todos los médicos endoscopistas pertenecen a la sección de gastroenterología y endoscopía del hospital y se desempeñan como médicos de planta.
+
+Las bases de datos se obtuvieron a partir del sistema de resportes de endoscopía en cada una de las salas en donde se realizaron los estudios. 
+
+Se anonimizaron los datos de los pacientes eliminando los nombres, apellidos y documentos de los mismos. 
+
+# Desarrollo del análisis y exploraciones
+
+## Para comenzar, cargo todas las librerías que voy a usar
+
+```{r echo=TRUE, results='hide'}
+library(tidyverse)
+library(dplyr)
+library(gapminder)
+library(readxl)
+library(RUMBA)
+library(sf)
+library(osmdata)
+library(ggmap)
+library(janitor)
+```
+
+
+## Cargo las bases de datos
+
+Son 2 tablas de excel de endoscopías de 2 sedes del mismo centro hospitalario: Saavedra y Las Heras.
+
+*(Tengo que agrandar los guess max porque hay observaciones NA en varias columnas al principio)*
+
+```{r, echo=TRUE, results='hide'}
+vcc_saav <-read_excel("C:/Users/Ale/Documents/Ciencia de datos/Curso ciencia de datos/Trabajo final/Excel VCC - Saveedra 2018.xlsx", guess_max = 3000)
+vcc_lh <-read_excel("C:/Users/Ale/Documents/Ciencia de datos/Curso ciencia de datos/Trabajo final/Endoscopia Las heras 2018.xls", guess_max = 1000) 
+
+```
+
+
+## Uno las 2 tablas y selecciono las columnas que me interesan analizar
+
+*(La preparación y el nro de historia clínica las interpreta como charater, por lo cual las transformo en  numeric)*
+
+```{r, echo=TRUE, results= "hide"}
+
+vcc<- bind_rows(vcc_lh,vcc_saav) %>%
+        select(Sexo,FecNacimiento,Edad,Indicacion,Cobertura,Terapeutica,Biopsia,Operador,Conclusiones1,Conclusiones2,Conclusiones3,TipEs,FecEstudio,Esofago,Estomago,Duodeno,Colonoscopia,Preparacion, PreparadoCon, Direccion)
+
+str(vcc)
+head(vcc)
+
+vcc$Preparacion <- as.numeric(vcc$Preparacion)
+
+```
+
+
+## Convierto las direcciones a latitud y longitud con geolocalización
+
+Para eso genero un nuevo objeto con un vector que tenga las direcciones y le aplico la funcion de geolocalización
+
+Luego uno esa tabla a la original descartando la columna "Dirección" para que no quede repetida y renombro la columna con las coordenadas geográficas como "SEDE"
+
+*(podría haber corrido mutate_USIG_geocode, pero me deja esperando mucho tiempo porque son muchos datos)*
+
+```{r,echo=TRUE, results= "hide"}
+vcc_geo <- USIG_geocode(c("AV GRAL LAS HERAS 2900","GALVAN 4105"))
+
+vcc <- cbind(vcc, vcc_geo) %>%
+        select(-Direccion) %>%
+        rename(Sede = address_normalised)
+
+glimpse(vcc)
+
+```
+
+
+## Chequeo cuales son los operadores que me interesan y las terapéuticas
+
+```{r, eval= F, results='hide'}
+unique(vcc$Operador)
+unique(vcc$Terapeutica)
+```
+
+
+## Convierto los operadores en una sola variante de cada uno (las iniciales) y limpio las terapéuticas y las indicaciones
+
+Hay algunos operadores que ciertas polipectomías no las registraron como tales por ser con forceps por lo que rastreo en el texto de la conclusión si encontraron pólipos y si es así y no está registrada la polipectomía (es NA), la registro.  
+
+Paso todo el texto a mayúsculas. 
+
+Luego filtro los operadores que me interesan y descarto algunas colonoscopías mal registradas. 
+
+```{r, echo=TRUE, results= "hide"}
+vcc <- vcc %>%
+        mutate(Operador = case_when (Operador == "PERALTA" | Operador == "Angel Daniel Peralta MN 92.347" ~ "A", 
+                                     Operador == "Juan Lasa MN 119929" | Operador == "Juan Lasa MN 119.929" ~ "B",
+                                     Operador ==  "Dr. Gustavo Cernadas MN 137.352" | Operador == "Gustavo Cernadas M.N. 137.352" ~ "C",
+                                     Operador == "Rafael Moore MN 85.298" ~ "D", 
+                                     Operador == "Alejandro Rey MN 134.017" ~ "E",
+                                     Operador == "Ignacio Fanjul MN 126.170" ~ "F",
+                                     Operador == "Pablo Olivera Sendra MN 129.392" ~ "G",
+                                     Operador == "Dima Guillermo MN84344" ~ "H",
+                                     TRUE ~ Operador), 
+               Terapeutica = case_when(str_detect(Terapeutica, regex("p(o|e)l", ignore_case = TRUE)) ~ "POLIPECTOMIA",
+                                       str_detect(Terapeutica, regex("muco", ignore_case = TRUE)) ~ "MUCOSECTOMIA",
+                                       str_detect(Terapeutica, regex("arg(o|ó|ò)n|apc", ignore_case = TRUE)) ~ "ARGON",
+                                       str_detect(Terapeutica, regex("band", ignore_case = TRUE)) ~ "BANDING",
+                                       str_detect(Terapeutica, regex("sangr|hemost", ignore_case = TRUE)) ~ "HEMOSTASIA LESION SANGRANTE",
+                                       str_detect(Terapeutica, regex("extrañ", ignore_case = TRUE)) ~ "EXTRACCION CUERPO EXTRAÑO",
+                                       str_detect(Terapeutica, regex("gastrost", ignore_case = TRUE)) &! str_detect(Terapeutica, regex("RECAMBIO", ignore_case = T))~ "GASTROSTOMIA",
+                                       str_detect(Terapeutica, regex("dil(at|ta)", ignore_case = TRUE)) &! str_detect(Terapeutica, regex("colon", ignore_case = T)) ~ "DILATACION ESOFAGICA",
+                                       str_detect(Terapeutica, regex("dilat", ignore_case = TRUE)) &! str_detect(Terapeutica, regex("esof", ignore_case = T)) ~ "DILATACION COLONICA",
+                                       str_detect(Terapeutica, regex("108", ignore_case = TRUE)) ~ "COLOCACION DE SONDA NASOGRASTRICA",
+                                       str_detect(Terapeutica, regex("RECAMBIO", ignore_case = TRUE)) ~ "RECAMBIO DE BOTON GASTRICO",
+                                       str_detect(Terapeutica, regex("esclero", ignore_case = TRUE)) ~ "ESCLEROTERAPIA DE ANGIODISPLASIA",
+                                     TRUE ~ Terapeutica),
+               Terapeutica = if_else(str_detect(Colonoscopia, regex("poli", ignore_case = T)) & is.na(Terapeutica),"POLIPECTOMIA", Terapeutica),
+               Indicacion = if_else(str_detect(Indicacion, regex("screening( de| ca| co|  )", ignore_case = T)), "SCREENING CANCER COLORRECTAL", Indicacion),        
+               TipEs = if_else(TipEs == "O", "G", TipEs),
+               PreparadoCon = if_else(PreparadoCon == "FOSFATOS", "PICOSULFATO", PreparadoCon)) %>%
+         mutate_at(vars(which(sapply(., is.character))), str_to_upper) %>%
+         filter(Operador %in% c("A","B","C", "D", "E", "F", "G", "H") &!(TipEs == "C" & Colonoscopia == is.na(Colonoscopia)))
+
+head(vcc)
+        
+```
+
+
+## Mapeo el volumen de estudios por sede
+
+Para ello, primero indico el bounding box y descargo el mapa de CABA
+
+```{r, echo=TRUE, results= "hide"}
+
+bbox <- getbb("Ciudad Autónoma de Buenos Aires,Argentina")
+
+CABA <- get_stamenmap(bbox = bbox,
+                      maptype = "terrain",zoom=12)
+```
+
+
+Mapeo el número de endoscopias según Sede:
+
+```{r, echo=TRUE}
+mapa_estudios_sede <- ggmap(CABA) +
+    stat_density2d(data=vcc, aes(x=lon, y=lat, fill=stat(level)),geom="polygon") +
+         scale_fill_viridis_c() +
+         labs(title = "Número de estudios por sede",
+       subtitle = "Galvan 4105, Av Gral Las Heras 2900. CABA",
+       fill = "Número de estudios") +
+          theme_void()
+
+mapa_estudios_sede
+
+```
+
+
+## Grafico el volumen de estudios por sede
+
+Genero primero una tabla con la cantidad y tipo de estudio por sede.
+
+```{r, echo=TRUE, results= "hide"}
+estudios_x_sede <- vcc %>%
+        count(TipEs, Sede)
+
+head(estudios_x_sede)
+
+suma_estudios_sede <- estudios_x_sede %>% 
+                         group_by(Sede) %>% 
+                        summarise(n = sum(n))%>%
+                        ungroup()
+                        
+suma_estudios_tipo <- estudios_x_sede %>% 
+                         group_by(Sede, TipEs) %>% 
+                        summarise(n = sum(n)) %>%
+                        ungroup()
+
+suma_estudios_sede
+suma_estudios_tipo
+
+```
+
+
+Grafico número de estudios, agrupado por tipo, en funcion de sede: 
+
+```{r, echo=TRUE}
+grafico_estudios_sede <- ggplot(estudios_x_sede,
+                                 aes(x = Sede, y = n)) +
+                                         geom_col(aes(fill = TipEs), position = "dodge") +
+                                                scale_fill_brewer(palette="Pastel1") +
+                                labs(title = "Estudios por Sede",
+                                     x = "Sede",
+                                     y = "Cantidad de estudios",
+                                     color = "Tipo de estudio")
+
+grafico_estudios_sede
+
+```
+
+
+## Creo otras dos tablas para inspeccionar. Uno que tenga solo las videocolonoscopías y otro que tenga sólo las videocolonoscopías de rastreo y vigilancia de cáncer colorrectal
+
+*(Como aparece un valor que es "vigilancia proctitis", lo saco del filtro)*
+
+```{r, echo=TRUE, results= "hide"}
+solo_vcc <- vcc %>%
+        filter(TipEs == "C")
+
+screening <- solo_vcc %>%
+        filter(str_detect(Indicacion, regex("screening|vigilancia", ignore_case = T)) &! str_detect(Indicacion, regex("proctitis", ignore_case = T)))
+
+head(screening)
+
+```
+
+
+## Armo otro data frame contando la cantidad de polipectomías/mucosectomías por operador en los estudios de prevención
+
+```{r echo=TRUE, results= "hide"}
+terapeutica_operador <- screening %>%
+                        count(Terapeutica, Operador)
+                      
+
+terapeutica_operador$Terapeutica[is.na(terapeutica_operador$Terapeutica)] <- "SIN LESIONES"
+
+head(terapeutica_operador)
+
+suma_estudios_operador <- terapeutica_operador %>% 
+                         group_by(Operador) %>% 
+                        summarise(total = sum(n)) %>%
+                        ungroup()
+
+mean(suma_estudios_operador$total)
+
+```
+
+
+## Grafico terapéuticas en función del operador
+
+```{r echo=TRUE}
+grafico_terapeutica_operador <- ggplot(terapeutica_operador,
+                          aes(x= Operador, y = n, label = n, fill = Terapeutica)) +
+                        geom_bar(position = "dodge", stat = "identity") +
+                                scale_fill_brewer(palette="Accent") +
+                         facet_grid(~Operador, scales="free", space="free_x") +
+                            labs(title = "Terapéuticas por operador") +
+                          theme(axis.title.x = element_blank())
+
+grafico_terapeutica_operador
+
+```
+
+
+## Grafico terapéuticas en función de sede
+
+Para eso genero un nuevo data frame: terapeutica_sede
+
+```{r, echo=TRUE, results= "hide"}
+terapeutica_sede <- screening %>%
+                        count(Terapeutica, Sede)
+
+head(terapeutica_sede)
+
+suma_terapeutica_sede <- terapeutica_sede %>% 
+                         group_by(Sede, Terapeutica) %>% 
+                        summarise(n = sum(n)) %>%
+                        ungroup()
+
+suma_terapeutica_sede
+```
+
+
+Grafico terapéuticas en función de sede
+
+```{r, echo=TRUE}        
+grafico_terapeutica_sede <- ggplot(terapeutica_sede[!is.na(terapeutica_sede$Terapeutica),],
+                           aes(x = Sede, y = n)) +
+                        geom_bar(aes(fill = Terapeutica), position = "dodge", stat= "identity", na.rm = T) +
+                        theme_bw()
+                labs(title = "Terapéuticas por sede",
+                       x = "Sede", 
+                       y = "Terapéutica",
+                       color = "Tipo de Terapéutica")
+
+grafico_terapeutica_sede
+```
+
+
+## Calculo la tasa de detección de pólipos por operador
+
+```{r, echo=TRUE, results= "hide"}
+polipecto_operador <- terapeutica_operador %>%
+                        subset(Terapeutica != "SIN LESIONES")
+
+polipecto_operador
+
+tabla_deteccion <- terapeutica_operador %>% 
+                        left_join(polipecto_operador, by = c("Operador" = "Operador", "Terapeutica" = "Terapeutica")) %>%
+                        group_by(Operador) %>%
+                                  summarise(Estudios = sum(n.x), Polipectomias = sum(n.y, na.rm = T), 
+                                            Tasa = round((Polipectomias/Estudios)*100, 1)) %>%
+        ungroup()
+
+mean(polipecto_operador$n)
+mean(tabla_deteccion$Tasa)
+
+head(tabla_deteccion)
+
+```
+
+
+## Grafico la tasa de detección de pólipos por operador
+
+*(El estándar mínimo de calidad es de 20%)*
+
+```{r echo=TRUE}
+grafico_tasa <- ggplot(tabla_deteccion,
+                           aes(x = Operador, y = Tasa, label = Tasa)) +
+                        geom_bar(aes(fill = Tasa), position = "dodge", stat= "identity", na.rm = T) +
+                        theme_bw() +
+                coord_flip(ylim= c(0,65)) +
+                geom_text(hjust = -0.5, size = 2, position = position_dodge(width = .75)) +
+                labs(title = "Tasa de detección por operador",
+                       x = "Operador", 
+                       y = "Tasa de detección en %",
+                       color = "Tasa") 
+
+grafico_tasa
+
+```
+
+
+## Hago dos nuevos gráficos: uno del número de polipectomías en función del número de estudios de rastreo y otro de la tasa de detección en función del total de estudios de rastreo
+
+```{r echo=TRUE}
+grafico_polipos_estudios <- ggplot(tabla_deteccion,
+        aes(x = Estudios, y = Polipectomias)) +
+        geom_point()
+
+grafico_tasa_estudios <- ggplot(tabla_deteccion,
+        aes(x = Estudios, y = Tasa)) +
+        geom_point()
+
+grafico_polipos_estudios
+grafico_tasa_estudios
+
+```
+
+
+## Analizo si hay correlación entre el número de estudios y la tasa de detección
+
+Viendo los gráficos previos, pareciera haberla en el primero (lo cual tiene sentido), pero no en el segundo. 
+
+```{r echo=TRUE}
+cor(tabla_deteccion$Estudios, tabla_deteccion$Polipectomias)
+
+cor(tabla_deteccion$Estudios, tabla_deteccion$Tasa)
+```
+
+
+## Hago una regresión lineal simple del número de polipectomías según el número de estudios de rastreo
+
+```{r echo=TRUE}
+regresion_lineal_simple <-  lm(Polipectomias ~ Estudios,
+               tabla_deteccion)
+
+regresion_lineal_simple
+```
+
+
+## Ahora grafico nuevamente el número de polipectomías en función de estudios, sumándole el modelo de regresión lineal calculado
+
+```{r echo=TRUE}
+grafico_modelado <- ggplot(tabla_deteccion,
+        aes(x = Estudios, y = Polipectomias)) +
+        geom_point() +
+          geom_abline(aes(intercept =  10.0680, slope =  0.4177), color = 'blue') +
+        labs(title = "Correlación entre estudios y polipectomías")
+
+grafico_modelado
+
+```
+
+## Calculo la tasa de estudios completos
+
+Creo un data frame que filtre todos los estudios completos. Eso implica llegada a ciego, intubación del íleon o llegada hasta una anastomosis entre intestino delgado y colon remanente. Para esto itero varias veces sobre expresiones regulares hasta filtrar los estudios en los cuales se mencionan estas referencias. El anti join me permite crear una tabla que me muestra todo lo que excluí (los estudios incompletos). Agrego en ambas tablas una columna que diga si el estudio es completo o no. 
+
+Una vez hecho esto, divido el número de observaciones de la nueva tabla sobre las observaciones de la tabla con todas las colonoscopías y multiplico el resultado por 100, lo cual me da la proporción de estudios completos. 
+
+Finalmente creo un nuevo df en el cual me muestre el número de estudios completos e incompletos. 
+
+```{r echo=TRUE, results = "hide"}
+intubacion_cecal <- solo_vcc %>%
+                filter(str_detect(Colonoscopia, regex("c(ie|ei)go|cecal|(i|í)leo|enter|ostom(i|í)a|aferente|pouch", ignore_case = T)))
+
+
+dif <- anti_join(solo_vcc, intubacion_cecal)
+
+tasa_intubacion <- (nrow(intubacion_cecal)/nrow(solo_vcc))*100
+
+intubacion_cecal$estudio_completo = "COMPLETO"
+dif$estudio_completo = "INCOMPLETO"
+
+```
+
+## Grafico los resultados sobre estudios completos e incompletos
+
+Me interesa mostrar los números absolutos. 
+Creo un df nuevo para poder graficar todo en una sola barra.
+
+```{r echo=TRUE}
+
+x <- rep("Estudio",2)
+y <- c(nrow(intubacion_cecal),nrow(dif))
+name <- c("COMPLETO","INCOMPLETO")
+df <- data.frame(x,y,name)
+
+grafico_intubacion <- ggplot(df, aes(x = x, y=y, fill = name)) +
+  geom_bar(stat = "identity") + 
+  labs(title = "Tasa de intubación cecal",
+       x = "Estudio",
+       y = "Cantidad de estudios",
+       fill = "Estudio" ) +
+  scale_fill_manual(values = c("cornflowerblue", "darkmagenta")) +
+        geom_text(aes(label = y), position = position_stack(vjust = 0.5), size = 5)
+
+
+tasa_intubacion
+
+grafico_intubacion
+
+```
+```
+
+
+## Analizo las preparaciones
+ 
+Para ello voy a generar una tabla con los estudios realizados en ambas sedes para evaluar cómo es la preparación en general. 
+Luego voy a analizar si hay diferencias entre las preparaciones. 
+
+```{r echo=TRUE, results= "hide"}
+
+boston <- solo_vcc %>%
+        select(Preparacion, PreparadoCon)%>%
+         subset(Preparacion !=0)
+             
+head(boston)
+glimpse(boston)
+
+```
+
+
+## Calculo las medidas de tendencia central de la escala de Boston
+
+*(Para el modo tengo que crear una función ya que no viene en el paquete estadístico)*
+
+Grafico la calidad de la preparación en general y según el tipo de laxante utilizado. 
+
+*(Hay muchos registros que no tienen informado el tipo de preparación)*  
+
+```{r echo=TRUE, results= "hide"}
+
+getmode <- function(x) {
+   uniq <- unique(x)
+   uniq[which.max(tabulate(match(x, uniq)))]
+}
+
+x <- boston$Preparacion
+
+modo_boston <- getmode(x)
+
+calidad_preparacion <- boston %>%
+                     group_by(PreparadoCon) %>%
+                        count(Preparacion) %>%
+                        ungroup()
+
+head(calidad_preparacion)
+
+boston_dicotomico_completo <- boston %>%
+                                mutate(Preparacion = if_else(Preparacion >= 6, "Adecuada", "Inadecuada")) 
+                                
+head(boston_dicotomico_completo)
+
+tabyl(boston_dicotomico_completo$Preparacion)
+
+```
+
+```{r echo=TRUE}
+summary(boston$Preparacion)
+modo_boston
+```
+
+```{r echo=TRUE}
+grafico_preparacion <- ggplot(calidad_preparacion, 
+                         aes (x = Preparacion, y = n)) +
+                          geom_col(aes(fill = n), position = "dodge") +
+                        labs ( title = "Puntaje de escala de Boston del total de videocolonoscopías",
+                               x = "Escala de Boston",
+                               y = "Número de estudios",
+                               fill = "Número de estudios")
+
+grafico_preparacion_facetado <- ggplot(calidad_preparacion, 
+                        aes (x = Preparacion, y = n)) +
+                        geom_col(aes(fill = n), position = "dodge") +
+                         facet_wrap(~PreparadoCon) +
+                        labs (title = "Puntaje de escala de Boston de acuerdo a la preparación utilizada",
+                               x = "Escala de Boston",
+                               y = "Número de estudios",
+                              fill = "Número de estudios")
+
+grafico_preparacion
+grafico_preparacion_facetado
+
+```
+
+
+## Comparo la calidad de la preparación según el tipo de laxante utilizado
+
+Para ello, primero elimino las observaciones que no tienen registrado el tipo de preparación utilizada.
+
+Veo medias y medianas de ambos grupos. 
+
+```{r echo=TRUE}
+boston_comparado <- na.omit(boston)
+
+
+medias_preparacion <- boston_comparado %>% 
+                        group_by(PreparadoCon) %>% 
+                        summarize(mean = mean(Preparacion), median = median(Preparacion)) %>%
+                        na.omit() %>%
+                        ungroup()
+medias_preparacion
+
+```
+
+
+## Calculo diferencias entre preparaciones
+
+La distribución de ambos pareciera ser una distribución normal. Aplico un test de Kolgomorov para evaluar si realmente es normal. 
+Lo es, por lo que comparo las diferencias con un t-test.
+
+Para asegurarme que realmente tiene una distribución normal y comparar con el procedimiento anterior, paso el puntaje de boston a logarítmico y nuevamente aplico un t-test. 
+
+```{r echo=TRUE}
+
+peg <- boston_comparado %>%
+        filter(PreparadoCon == "ETILENGLICOL")
+
+pico <- boston_comparado %>%
+        filter(PreparadoCon == "PICOSULFATO")
+
+ks.test(boston_comparado$Preparacion, pnorm)
+ks.test(peg$Preparacion, pnorm)
+ks.test(pico$Preparacion, pnorm)
+
+
+t.test(Preparacion ~ PreparadoCon, data=boston_comparado) 
+
+
+boston_comparado_log <- boston_comparado
+boston_comparado_log[,1] <- log(boston_comparado[,1])
+
+t.test(Preparacion ~ PreparadoCon, data=boston_comparado_log)
+
+```
+
+
+## Dicotomizo la variable preparación para hacer otro análisis
+
+Se considera adecuada una preparación mayor o igual a 6. Una preparación de 5 o menos resulta inadecuada para la correcta valoración de la mucosa colónica. 
+
+Para hacer el análisis, convierto la escala numérica de Boston en una variable dicotómica de preparación: *Suficiente* e *Insuficiente*.
+
+```{r echo=TRUE, results= "hide"}
+boston_dicotomico <- boston_comparado %>% 
+  mutate(Preparacion = if_else(Preparacion >= 6, "Adecuada", "Inadecuada"))
+
+head(boston_dicotomico)
+
+porcentajes_preparacion_general <- tabyl(boston_dicotomico$Preparacion)
+        
+porcentajes_calidad_preparacion <- tabyl(boston_dicotomico$PreparadoCon)
+
+porcentajes_preparacion_general
+porcentajes_calidad_preparacion
+
+```
+
+
+## Para analizar estas variables, aplico entonces un test de chi cuadrado
+
+```{r echo=TRUE}
+chisq.test(boston_dicotomico$PreparadoCon, boston_dicotomico$Preparacion, correct=FALSE)
+```
+
+
+## Grafico la calidad de la preparación (suficiente/insuficiente) en función del laxante utilizado
+
+Creo una tabla con el boston dicotomizado. 
+
+```{r echo=TRUE, results= "hide"}
+df_grafico_dicotomico <- boston_dicotomico %>%
+                        group_by(PreparadoCon) %>%
+                        count(Preparacion) %>%
+                        ungroup()
+
+head(df_grafico_dicotomico)
+
+```
+
+
+Grafico preparación en función de tipo de laxante. 
+
+```{r echo=TRUE}
+grafico_dicotomico <- ggplot(df_grafico_dicotomico, 
+                         aes (x = PreparadoCon, y = n)) +
+                          geom_col(aes(fill = Preparacion), position = "stack") +
+                        labs(title = "Calidad de preparación según el tipo utilizado",
+                               x = "Tipo de preparación",
+                               y = "Calidad de preparación",
+                             fill = "Calidad de preparación" ) +
+                        scale_fill_manual(values = c("#C7CEEA", "#FF9AA2"))
+grafico_dicotomico
+```
+
+
+
+
+# Descripción de los resultados obtenidos
+
+En relación al objetivo primario, se observó una muy buena tasa de detección de pólipos de todo el servicio de endoscopía, variando la misma entre 31,4% y 64% con una media general del 47,25%. La media de estudios realizados por operador fue de 256, con un máximo de 667 estudios y un mínimo de 38. 
+
+Existe una correlación lineal muy fuerte entre el número de endoscopías y número de polipectomías realizadas (0.98), no así entre el número de endoscopías y la tasa de detección de pólipos (-0.18). 
+
+Se realizaron un total de 5309 estudios en 2018, estando distribuídos de manera similar en ambas sedes (2652 en Galván y 2657 en Las Heras). En la sede de Galván se realizaron 1458 colonoscopías, 1192 gastroscopías y 2 rectoscopías. En la sede de Las Heras se realizaron 1527 colonoscopías, 1128 gastroscopías y 2 rectoscopías.
+
+Del total de estudios, 2985 fueron colonoscopías. 2048 de estas fueron indicadas para prevención de cáncer colorrectal. En la sede de Galván se realizaron 1024 colonoscopías de rastreo. En 476 estudios se resecaron pólipos. En la sede de Las Heras también se realizaron 1024 colonoscopías de rastreo. En 463 estudios se resecaron pólipos. 
+
+De las 2985 colonoscopías realizadas, en el 95% (2838) se logró realizar el estudio en forma completa. 
+
+En relación a la calidad de la preparación de los estudios, en el 88% fue adecuada, siendo la media de puntaje 6,88. En el 70,8% de los estudios la preparación utilizada fue etilenglicol, mientras que en el 29,2% se utilizó picosulfato. No se observaron diferencias estadísticamente significativas entre el uso de distintos laxantes y la calidad de la preparaión colónica. 
+
+
+# Conclusiones
+
+En este trabajo se analizaron algunos indicadores de calidad de endoscopía digestiva en un hospital universitario de alta complejidad. Se observó que la tasa de detección de pólipos del servicio en general y de cada endoscopista en particular está significativamente por encima de los estándares mínimos recomendados. Se evidenció asimismo, que el número de estudios en los cuales se detectan pólipos está asociado en forma lineal con el número de estudios realizados, lo cual es esperable si la calidad de las endoscopías es buena. No se observó asociación entre el número de endoscopías realizadas y la tasa de detección de pólipos. La cantidad y tipo de estudios realizados fue similiar en ambas sedes. El porcentaje de estudios completos fue satisfactorio.
+
+Con respecto a la preparación colónica, se observó una limpieza adecuada en el 88% de los estudios sin hallarse diferencias estadísticamente significativas en relación al laxante utilizado. El estándar recomendado de limpieza adecuada varía entre el 85% y el 90%, siendo este último el deseado para las colonoscopias de cribado. Los resultados observados están dentro de lo esperado, aunque se deberían implementar modificaciones para lograr el 90% recomendado para estudios de rastreo. 
+
+
+# Posibles análisis futuros sobre el tema
+
+El cálculo de la tasa de detección de adenomas, otro indicador de calidad en endoscopía digestiva, resulta del cotejamiento de las polipectomias con el resultado anatomopatológico. Al discernir entre lesiones pre malignas y lesiones sin riesgo de malignización, este indicador nos permite inferir con mayor grado de exactitud la eficacia en la prevención del cáncer colorrectal. Sería útil en futuros análisis contar con el resultado histopatológico de los pólipos resecados, para poder así calcular la tasa de detección de adenomas. 
+
+En relación a la preparación colónica, sería útil en un análisis futuro contar con el registro de la preparación por sectores, lo cual permitiría evaluar la correcta limpieza de cada segmento colónico. Por otro lado, contando con el horario del estudio, se podría evaluar si existieron diferencias en la calidad de la preparación en relación con el mismo. Dado que las indicaciones para realizar la toma del laxante son relativamente estandarizadas, cabe la posibilidad que existan diferencias en la limpieza según el horario en que se realizó el procedimiento. En caso de observarse dichas diferencias, la simple adecuación del horario de la toma del laxante podría ser suficiente para lograr el 90% de preparaciones adecuadas necesarias para los estudios de rastreo.
