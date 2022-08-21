@@ -154,14 +154,14 @@ Luego filtro los operadores que me interesan y descarto algunas colonoscopías m
 
 ```{r, echo=TRUE, results= "hide"}
 vcc <- vcc %>%
-        mutate(Operador = case_when (Operador == "PERALTA" | Operador == "Angel Daniel Peralta MN 92.347" ~ "A", 
-                                     Operador == "Juan Lasa MN 119929" | Operador == "Juan Lasa MN 119.929" ~ "B",
-                                     Operador ==  "Dr. Gustavo Cernadas MN 137.352" | Operador == "Gustavo Cernadas M.N. 137.352" ~ "C",
-                                     Operador == "Rafael Moore MN 85.298" ~ "D", 
-                                     Operador == "Alejandro Rey MN 134.017" ~ "E",
-                                     Operador == "Ignacio Fanjul MN 126.170" ~ "F",
-                                     Operador == "Pablo Olivera Sendra MN 129.392" ~ "G",
-                                     Operador == "Dima Guillermo MN84344" ~ "H",
+        mutate(Operador = case_when (Operador == "" | Operador == "" ~ "A", 
+                                     Operador == "" | Operador == "" ~ "B",
+                                     Operador ==  "" | Operador == "" ~ "C",
+                                     Operador == "" ~ "D", 
+                                     Operador == "" ~ "E",
+                                     Operador == "" ~ "F",
+                                     Operador == "" ~ "G",
+                                     Operador == "" ~ "H",
                                      TRUE ~ Operador), 
                Terapeutica = case_when(str_detect(Terapeutica, regex("p(o|e)l", ignore_case = TRUE)) ~ "POLIPECTOMIA",
                                        str_detect(Terapeutica, regex("muco", ignore_case = TRUE)) ~ "MUCOSECTOMIA",
