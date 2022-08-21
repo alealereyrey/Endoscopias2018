@@ -10,7 +10,7 @@ The secondary objectives are:
 - To investigate whether there is an association between the number of procedures performed and the number of polyps detected.
 - To investigate whether there is an association between the number of procedures performed and the polyp detection rate.
 - To calculate the studies completion rate
-- To Assess the quality of study preparation.
+- To Assess the quality of bowel cleansing.
 - To investigate if there is an association between the quality of the preparation and the type of laxative used.
 
 
@@ -47,7 +47,7 @@ cor(tabla_deteccion$Estudios, tabla_deteccion$Tasa)
 ## [1] -0.1780102
 ```
 
-## ** Performing and plotting a linear regression between polypectomies and number of studies**
+## **Performing and plotting a linear regression between polypectomies and number of studies**
 
 ```
 regresion_lineal_simple <-  lm(Polipectomias ~ Estudios,
@@ -65,5 +65,21 @@ Coefficients:
 <p align="center">
 <img src= "https://user-images.githubusercontent.com/60556106/185815852-ac35a9fc-59ca-4ce6-a35f-451caea9b1e8.PNG" width="80%">
 
+## **Colonoscopy completition rates**
+  
+<p align="center">
+<img src= "https://user-images.githubusercontent.com/60556106/185815951-faa899e4-3210-43ef-81d4-ada199131e73.PNG" width="70%">
 
+## **Assessment of bowel cleansing by laxative**
+
+<p align="center">
+<img src= "https://user-images.githubusercontent.com/60556106/185816021-34820941-f8df-4e10-84a2-b23d01fda4b3.PNG" width="80%">
+
+## **Conclusions**
+
+We found that the polyp detection rate in our hospital was significantly over the minimum standard recommendations. As expected in good quality colonoscopies, there is a linear association between the number of polypectomies and the number of studies performed. There was no correlation observed between the number of studies and the polyp detection rate. 
+  
+</pre>
+
+The proportion of studies completed (called cecal intubation rate) and the quality of bowel cleansing were in line with the standard recommendations for screening colonoscopies. 
 
