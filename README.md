@@ -1,4 +1,4 @@
-# Endoscopy quality indicators in a terciary referral hospita
+# Endoscopy quality indicators in a GI department
 
 To evaluate the performance of a GI endoscopy department there are several indicators that reflect the quality of the processes and procedures of healthcare delivery.  Monitoring and periodically analyzing the data allows us to estimate its current state and to develop measures regarding its constant improvement.
 
